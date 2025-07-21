@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Resume Analysis RAG Agent</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+        }
+        
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            margin-left: 20%;
+        }
+        
+        .bot-message {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            margin-right: 20%;
+        }
+        
+        .typing-indicator {
+            display: none;
+            font-style: italic;
+            color: #6c757d;
+        }
+        
+        .source-item {
+            background-color: #e9ecef;
+            border-left: 4px solid #007bff;
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            font-size: 0.875rem;
+        }
+        
+        .update-section {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 0.375rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="display-4 fw-bold mb-3">
+                        <i class="fas fa-robot me-3"></i>HR Resume Analysis RAG Agent
+                    </h1>
+                    <p class="lead mb-0">
+                        Intelligent document analysis for HR professionals. Upload resumes, job descriptions, 
+                        and HR documents to get AI-powered insights and analysis.
+                    </p>
+                </div>
+                <div class="col-lg-4 text-end">
+                    <i class="fas fa-file-alt fa-5x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'info' if category == 'info' else 'success' }} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' or category == 'warning' else 'info-circle' if category == 'info' else 'check-circle' }} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Update Vector Store Section -->
+        <div class="update-section">
+            <h3 class="mb-3">
+                <i class="fas fa-database me-2"></i>Update Vector Store
+            </h3>
+            <p class="mb-3">
+                Upload your HR documents, resumes, or job descriptions to the knowledge base. 
+                Leave the path empty to use the default directory from environment variables.
+            </p>
+            
+            <form method="POST" action="/update_vectorstore" class="row g-3">
+                <div class="col-md-8">
+                    <label for="file_path" class="form-label">
+                        <i class="fas fa-folder-open me-1"></i>File or Directory Path
+                    </label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="file_path" 
+                           name="file_path" 
+                           placeholder="Enter file or directory path (optional - uses default if empty)"
+                           title="Supports .txt, .pdf, and .docx files">
+                    <div class="form-text">
+                        Supports: .txt, .pdf, .docx files. Can be a single file or directory path.
+                    </div>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-upload me-2"></i>Update Vector Store
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Chat Section -->
+        <div class="row">
+            <div class="col-12">
+                <h3 class="mb-3">
+                    <i class="fas fa-comments me-2"></i>HR Analysis Chat
+                </h3>
+                
+                <!-- Chat Container -->
+                <div class="chat-container" id="chatContainer">
+                    <div class="message bot-message">
+                        <strong><i class="fas fa-robot me-2"></i>HR Assistant:</strong><br>
+                        Hello! I'm your HR Resume Analysis assistant. I can help you with:
+                        <ul class="mt-2 mb-0">
+                            <li>Resume evaluation and scoring</li>
+                            <li>Candidate-job matching analysis</li>
+                            <li>Skills gap identification</li>
+                            <li>Interview question suggestions</li>
+                            <li>Career progression insights</li>
+                            <li>Compensation benchmarking queries</li>
+                        </ul>
+                        Ask me anything about the uploaded HR documents!
+                    </div>
+                </div>
+                
+                <!-- Typing Indicator -->
+                <div class="typing-indicator" id="typingIndicator">
+                    <i class="fas fa-robot me-2"></i>HR Assistant is typing...
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="input-group mt-3">
+                    <input type="text" 
+                           class="form-control" 
+                           id="chatInput" 
+                           placeholder="Ask about resumes, candidates, job requirements, or HR analysis..."
+                           onkeypress="handleKeyPress(event)">
+                    <button class="btn btn-primary" type="button" onclick="sendMessage()">
+                        <i class="fas fa-paper-plane me-2"></i>Send
+                    </button>
+                </div>
+                
+                <!-- Quick Questions -->
+                <div class="mt-3">
+                    <small class="text-muted">Quick questions:</small><br>
+                    <div class="mt-2">
+                        <button class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="sendQuickQuestion('Evaluate this candidate\'s qualifications')">
+                            Evaluate Qualifications
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="sendQuickQuestion('What are the key skills mentioned in these resumes?')">
+                            Key Skills Analysis
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="sendQuickQuestion('Compare candidates for this position')">
+                            Compare Candidates
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="sendQuickQuestion('What interview questions should I ask?')">
+                            Interview Questions
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-4">
+        <div class="container text-center">
+            <p class="text-muted mb-0">
+                <i class="fas fa-shield-alt me-2"></i>HR Resume Analysis RAG Agent - 
+                Powered by OpenAI & Pinecone
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendQuickQuestion(question) {
+            document.getElementById('chatInput').value = question;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const question = input.value.trim();
+            
+            if (!question) return;
+            
+            // Clear input
+            input.value = '';
+            
+            // Add user message
+            addMessage(question, 'user');
+            
+            // Show typing indicator
+            document.getElementById('typingIndicator').style.display = 'block';
+            scrollToBottom();
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+                
+                const data = await response.json();
+                
+                // Hide typing indicator
+                document.getElementById('typingIndicator').style.display = 'none';
+                
+                if (response.ok) {
+                    let botResponse = data.answer;
+                    
+                    // Add sources if available
+                    if (data.sources && data.sources.length > 0) {
+                        botResponse += '<div class="mt-3"><strong>Sources:</strong>';
+                        data.sources.forEach((source, index) => {
+                            botResponse += `<div class="source-item">
+                                <strong>Source ${index + 1}:</strong> ${source.content}
+                            </div>`;
+                        });
+                        botResponse += '</div>';
+                    }
+                    
+                    addMessage(botResponse, 'bot');
+                } else {
+                    addMessage(`Error: ${data.error}`, 'bot');
+                }
+            } catch (error) {
+                // Hide typing indicator
+                document.getElementById('typingIndicator').style.display = 'none';
+                addMessage(`Error: Could not connect to the server. ${error.message}`, 'bot');
+            }
+        }
+
+        function addMessage(content, sender) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            if (sender === 'user') {
+                messageDiv.innerHTML = `<strong><i class="fas fa-user me-2"></i>You:</strong><br>${content}`;
+            } else {
+                messageDiv.innerHTML = `<strong><i class="fas fa-robot me-2"></i>HR Assistant:</strong><br>${content}`;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Auto-focus on chat input
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('chatInput').focus();
+        });
+    </script>
+</body>
+</html>
